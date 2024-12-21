@@ -2,3 +2,4 @@ mysql-connector-python
 schedule
 scikit-learn
 numpy
+pandas
