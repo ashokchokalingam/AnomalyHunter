@@ -1,13 +1,16 @@
+import os
+import logging
+import schedule
+import time
+from datetime import datetime
 import mysql.connector
 from mysql.connector import Error
 from sklearn.preprocessing import StandardScaler, LabelEncoder
 from sklearn.cluster import DBSCAN
 from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.decomposition import PCA
 import numpy as np
-import logging
-import schedule
-import time
-from datetime import datetime
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
@@ -84,7 +87,11 @@ def preprocess_data(data):
         provider_name_encoded.reshape(-1, 1)
     ))
 
-    return combined_data
+    # Reduce dimensionality using PCA
+    pca = PCA(n_components=50)  # Adjust n_components based on dataset size and variance explained
+    reduced_data = pca.fit_transform(combined_data)
+
+    return reduced_data
 
 def run_dbscan(data):
     """Run DBSCAN clustering on the provided data and return the cluster labels."""
@@ -124,7 +131,21 @@ def detect_anomalies():
 
     preprocessed_data = preprocess_data(data)
     start_time = datetime.now()
-    cluster_labels = run_dbscan(preprocessed_data)
+
+    # Split data into batches to avoid memory issues
+    batch_size = 10000  # Adjust based on available memory
+    cluster_labels = np.array([])
+
+    with ThreadPoolExecutor(max_workers=os.cpu_count()) as executor:
+        futures = []
+        for i in range(0, len(preprocessed_data), batch_size):
+            batch_data = preprocessed_data[i:i + batch_size]
+            futures.append(executor.submit(run_dbscan, batch_data))
+
+        for future in as_completed(futures):
+            batch_labels = future.result()
+            cluster_labels = np.concatenate((cluster_labels, batch_labels))
+
     end_time = datetime.now()
     duration = end_time - start_time
     logging.info(f"DBSCAN clustering completed in {duration.total_seconds()} seconds.")
