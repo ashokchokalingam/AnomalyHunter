@@ -11,6 +11,8 @@ from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.decomposition import PCA
 import numpy as np
 from concurrent.futures import ThreadPoolExecutor, as_completed
+import psutil  # For monitoring system resources
+from sklearn.metrics import silhouette_score  # For evaluating clustering
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
@@ -87,8 +89,12 @@ def preprocess_data(data):
         provider_name_encoded.reshape(-1, 1)
     ))
 
+    # Ensure n_components is within the valid range
+    n_samples, n_features = combined_data.shape
+    n_components = min(50, n_samples, n_features)
+
     # Reduce dimensionality using PCA
-    pca = PCA(n_components=50)  # Adjust n_components based on dataset size and variance explained
+    pca = PCA(n_components=n_components)  # Adjust n_components based on dataset size and variance explained
     reduced_data = pca.fit_transform(combined_data)
 
     return reduced_data
@@ -97,7 +103,24 @@ def run_dbscan(data):
     """Run DBSCAN clustering on the provided data and return the cluster labels."""
     scaler = StandardScaler()
     data_scaled = scaler.fit_transform(data)
-    db = DBSCAN(eps=0.5, min_samples=5).fit(data_scaled)
+    
+    # Tune DBSCAN parameters
+    best_score = -1
+    best_eps = 0.5
+    best_min_samples = 5
+    for eps in np.arange(0.1, 1.0, 0.1):
+        for min_samples in range(2, 10):
+            db = DBSCAN(eps=eps, min_samples=min_samples).fit(data_scaled)
+            if len(set(db.labels_)) > 1:  # Ensure we have more than one cluster
+                score = silhouette_score(data_scaled, db.labels_)
+                if score > best_score:
+                    best_score = score
+                    best_eps = eps
+                    best_min_samples = min_samples
+
+    logging.info(f"Best DBSCAN parameters: eps={best_eps}, min_samples={best_min_samples}, silhouette_score={best_score}")
+    
+    db = DBSCAN(eps=best_eps, min_samples=best_min_samples).fit(data_scaled)
     return db.labels_
 
 def update_cluster_labels(data, cluster_labels):
@@ -133,7 +156,7 @@ def detect_anomalies():
     start_time = datetime.now()
 
     # Split data into batches to avoid memory issues
-    batch_size = 10000  # Adjust based on available memory
+    batch_size = determine_batch_size(len(preprocessed_data))
     cluster_labels = np.array([])
 
     with ThreadPoolExecutor(max_workers=os.cpu_count()) as executor:
@@ -151,6 +174,17 @@ def detect_anomalies():
     logging.info(f"DBSCAN clustering completed in {duration.total_seconds()} seconds.")
 
     update_cluster_labels(data, cluster_labels)
+
+def determine_batch_size(total_samples):
+    """Determine the appropriate batch size based on system memory and total samples."""
+    mem = psutil.virtual_memory()
+    available_memory = mem.available / (1024 ** 2)  # Convert to MB
+    logging.info(f"Available memory: {available_memory} MB")
+
+    # Estimate batch size based on available memory (this is a heuristic)
+    batch_size = min(max(1000, int(available_memory / 10)), total_samples)
+    logging.info(f"Determined batch size: {batch_size}")
+    return batch_size
 
 # Run the script immediately with existing data
 detect_anomalies()
