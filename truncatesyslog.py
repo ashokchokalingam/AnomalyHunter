@@ -93,7 +93,7 @@ Restart=always
 WantedBy=multi-user.target
 EOL
 
-# Set the file permission for truncatesyslog.py
+# Ensure truncatesyslog.py is executable
 chmod +x $SCRIPT_DIR/truncatesyslog.py
 
 # Create a cron job to run the truncatesyslog.py script every hour
