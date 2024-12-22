@@ -75,6 +75,24 @@ Restart=always
 WantedBy=multi-user.target
 EOL
 
+# Create the logger.service file
+cat <<EOL | sudo tee /etc/systemd/system/logger.service
+[Unit]
+Description=Logger Service
+After=network.target
+After=dbscan.service
+Requires=dbscan.service
+
+[Service]
+User=root
+WorkingDirectory=$SCRIPT_DIR
+ExecStart=/usr/bin/python3 $SCRIPT_DIR/logger.py
+Restart=always
+
+[Install]
+WantedBy=multi-user.target
+EOL
+
 # Reload systemd, enable and start the services
 sudo systemctl daemon-reload
 sudo systemctl enable sql.service
@@ -82,5 +100,8 @@ sudo systemctl start sql.service
 sleep 5  # Wait for 5 seconds before starting the dbscan service
 sudo systemctl enable dbscan.service
 sudo systemctl start dbscan.service
+sleep 5  # Wait for 5 seconds before starting the logger service
+sudo systemctl enable logger.service
+sudo systemctl start logger.service
 
 echo "Setup complete. MySQL server and all required Python packages have been installed. Services have been created and started."
