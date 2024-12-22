@@ -1,45 +1,113 @@
-import os
-import logging
-from datetime import datetime, timedelta
+#!/bin/bash
 
-# Configure logging
-logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
-logger = logging.getLogger()
+# Check if the script is run as root
+if [ "$EUID" -ne 0 ]; then
+  echo "Please run as root"
+  exit 1
+fi
 
-# Log file path
-cef_file_path = "/var/log/anomalyhunter/anomaly.syslog"
+# Update package list
+sudo apt-get update
 
-def read_existing_logs():
-    """Read existing logs from the CEF log file and filter entries within the last 24 hours."""
-    twenty_four_hours_ago = datetime.now() - timedelta(hours=24)
-    existing_logs = []
-    if os.path.exists(cef_file_path):
-        with open(cef_file_path, "r") as cef_file:
-            for line in cef_file:
-                if line.startswith("CEF:"):
-                    # Extract timestamp from the CEF event
-                    parts = line.split(" rt=")
-                    if len(parts) > 1:
-                        timestamp_str = parts[1].split()[0]
-                        try:
-                            timestamp = datetime.strptime(timestamp_str, "%Y-%m-%d %H:%M:%S")
-                            if timestamp >= twenty_four_hours_ago:
-                                existing_logs.append(line.strip())
-                        except ValueError:
-                            logger.error(f"Error parsing timestamp: {timestamp_str}")
-    return existing_logs
+# Install MySQL server
+sudo apt-get install -y mysql-server
 
-def write_to_cef(existing_logs):
-    """Write the filtered logs to the CEF log file."""
-    with open(cef_file_path, "w") as cef_file:
-        for log in existing_logs:
-            cef_file.write(log + "\n")
-        logging.info(f"Truncated log file to keep only the last 24 hours of logs")
+# Automatically secure MySQL installation
+# Set the root password and apply security settings
+sudo debconf-set-selections <<< 'mysql-server mysql-server/root_password password sigma'
+sudo debconf-set-selections <<< 'mysql-server mysql-server/root_password_again password sigma'
 
-def truncate_logs():
-    """Truncate the log file to keep only the last 24 hours of logs."""
-    existing_logs = read_existing_logs()
-    write_to_cef(existing_logs)
+# Run the secure installation steps with automatic responses
+sudo mysql -u root -p'sigma' -e "ALTER USER 'root'@'localhost' IDENTIFIED WITH 'mysql_native_password' BY 'sigma';"
+sudo mysql -u root -p'sigma' -e "DELETE FROM mysql.user WHERE User='';"
+sudo mysql -u root -p'sigma' -e "DROP DATABASE IF EXISTS test;"
+sudo mysql -u root -p'sigma' -e "DELETE FROM mysql.db WHERE Db='test' OR Db='test\\_%';"
+sudo mysql -u root -p'sigma' -e "FLUSH PRIVILEGES;"
 
-if __name__ == "__main__":
-    truncate_logs()
+# Create the sigma_db database and sigma user
+sudo mysql -u root -p'sigma' -e "CREATE DATABASE IF NOT EXISTS sigma_db;"
+sudo mysql -u root -p'sigma' -e "CREATE USER IF NOT EXISTS 'sigma'@'localhost' IDENTIFIED BY 'sigma';"
+sudo mysql -u root -p'sigma' -e "GRANT ALL PRIVILEGES ON sigma_db.* TO 'sigma'@'localhost';"
+sudo mysql -u root -p'sigma' -e "FLUSH PRIVILEGES;"
+
+# Install Python3 and pip
+sudo apt-get install -y python3 python3-pip
+
+# Install required Python packages
+pip3 install -r requirements.txt
+
+# Run the Initializer_DB.py script to initialize the SQL tables
+python3 Initializer_DB.py
+
+# Get the current directory
+SCRIPT_DIR=$(dirname "$(readlink -f "$0")")
+
+# Create the sql.service file
+cat <<EOL | sudo tee /etc/systemd/system/sql.service
+[Unit]
+Description=SQL Service
+After=network.target
+
+[Service]
+User=root
+WorkingDirectory=$SCRIPT_DIR
+ExecStart=/usr/bin/python3 $SCRIPT_DIR/SQL.py
+Restart=always
+
+[Install]
+WantedBy=multi-user.target
+EOL
+
+# Create the dbscan.service file
+cat <<EOL | sudo tee /etc/systemd/system/dbscan.service
+[Unit]
+Description=DBSCAN Service
+After=sql.service
+Requires=sql.service
+
+[Service]
+User=root
+WorkingDirectory=$SCRIPT_DIR
+ExecStart=/usr/bin/python3 $SCRIPT_DIR/dbscan.py
+Restart=always
+
+[Install]
+WantedBy=multi-user.target
+EOL
+
+# Create the logger.service file
+cat <<EOL | sudo tee /etc/systemd/system/logger.service
+[Unit]
+Description=Logger Service
+After=network.target
+After=dbscan.service
+Requires=dbscan.service
+
+[Service]
+User=root
+WorkingDirectory=$SCRIPT_DIR
+ExecStart=/usr/bin/python3 $SCRIPT_DIR/logger.py
+Restart=always
+
+[Install]
+WantedBy=multi-user.target
+EOL
+
+# Set the file permission for truncatesyslog.py
+chmod +x $SCRIPT_DIR/truncatesyslog.py
+
+# Create a cron job to run the truncatesyslog.py script every hour
+(crontab -l 2>/dev/null; echo "0 * * * * /usr/bin/python3 $SCRIPT_DIR/truncatesyslog.py") | crontab -
+
+# Reload systemd, enable and start the services
+sudo systemctl daemon-reload
+sudo systemctl enable sql.service
+sudo systemctl start sql.service
+sleep 5  # Wait for 5 seconds before starting the dbscan service
+sudo systemctl enable dbscan.service
+sudo systemctl start dbscan.service
+sleep 5  # Wait for 5 seconds before starting the logger service
+sudo systemctl enable logger.service
+sudo systemctl start logger.service
+
+echo "Setup complete. MySQL server and all required Python packages have been installed. Services have been created and started. Cron job for truncatesyslog.py has been added."
