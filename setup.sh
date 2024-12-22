@@ -1,5 +1,11 @@
 #!/bin/bash
 
+# Check if the script is run as root
+if [ "$EUID" -ne 0 ]; then
+  echo "Please run as root"
+  exit 1
+fi
+
 # Update package list
 sudo apt-get update
 
@@ -29,6 +35,9 @@ sudo apt-get install -y python3 python3-pip
 
 # Install required Python packages
 pip3 install -r requirements.txt
+
+# Run the Initializer_DB.py script to initialize the SQL tables
+python3 Initializer_DB.py
 
 # Get the current directory
 SCRIPT_DIR=$(dirname "$(readlink -f "$0")")
