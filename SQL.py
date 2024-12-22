@@ -3,9 +3,11 @@ import re
 import time
 import logging
 import schedule
+import threading
 import mysql.connector
 from datetime import datetime, timedelta
 from mysql.connector import Error
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
@@ -24,6 +26,9 @@ db_config = {
 
 # Bookmark file to track the last processed log time
 bookmark_file = "bookmark.txt"
+
+# Batch size for database insertions
+BATCH_SIZE = 1000
 
 # Initialize SQL tables
 def initialize_sql_tables():
@@ -136,15 +141,17 @@ def process_log_file(file_path, last_processed_time):
                 continue
 
             try:
+                # Extract fields using regex
                 title = re.search(r'"title":"(.*?)"', line)
                 tags = re.search(r'"tags":\[(.*?)\]', line)
-                description = re.search(r'"description":"((?:[^"\\]|\\.)*)"', line)  # Updated regex to handle escaped quotes
+                description = re.search(r'"description":"((?:[^"\\]|\\.)*)"', line)
                 system_time = re.search(r'"SystemTime":"(.*?)"', line)
                 computer_name = re.search(r'"Computer":"(.*?)"', line)
                 user_id = re.search(r'"UserID":"(.*?)"', line)
                 event_id = re.search(r'"EventID":(\d+)', line)
                 provider_name = re.search(r'"Provider_Name":"(.*?)"', line)
 
+                # Extract and clean data
                 title = title.group(1).strip() if title else None
                 tags = tags.group(1).replace('"', "").strip() if tags else None
                 description = description.group(1).strip() if description else None
@@ -154,21 +161,17 @@ def process_log_file(file_path, last_processed_time):
                 provider_name = provider_name.group(1).strip() if provider_name else None
 
                 # Convert SystemTime to MySQL-compatible format
-                try:
-                    if system_time:
-                        # Truncate the timestamp to remove nanoseconds
-                        truncated_time = system_time.group(1).split('.')[0] + "Z"
-                        truncated_time = truncated_time.replace(" ", "")  # Remove any spaces
+                if system_time:
+                    try:
+                        truncated_time = system_time.group(1).replace(" ", "").split('.')[0] + "Z"
                         system_time = datetime.strptime(truncated_time, "%Y-%m-%dT%H:%M:%SZ")
                         if last_processed_time and system_time <= last_processed_time:
                             continue  # Skip already processed entries
                         if not latest_time or system_time > latest_time:
                             latest_time = system_time
-                    else:
+                    except ValueError as e:
+                        logger.error(f"Failed to process time: {system_time} | Error: {e}")
                         system_time = None
-                except ValueError as e:
-                    logger.error(f"Failed to process time: {system_time} | Error: {e}")
-                    system_time = None
 
                 processed_data.append((title, tags, description, system_time.strftime("%Y-%m-%d %H:%M:%S"), computer_name, user_id, event_id, provider_name, line.strip()))
 
@@ -178,30 +181,6 @@ def process_log_file(file_path, last_processed_time):
         logger.error(f"Error reading log file {file_path}: {e}")
 
     return processed_data, latest_time
-
-# Check if a record already exists with the same values (excluding description, provider_name, and system_time) and get the cluster value
-def get_existing_cluster_value(record):
-    """Check if a record with the same values (excluding description, provider_name, and system_time) exists and return the cluster value, if any."""
-    try:
-        connection = mysql.connector.connect(**db_config)
-        with connection.cursor() as cursor:
-            select_query = """
-            SELECT dbscan_cluster FROM sigma_alerts
-            WHERE title = %s AND tags = %s AND computer_name = %s AND user_id = %s AND event_id = %s
-            LIMIT 1;
-            """
-            cursor.execute(select_query, (record[0], record[1], record[4], record[5], record[6]))
-            result = cursor.fetchone()
-            if result:
-                return result[0]
-            else:
-                return None
-    except Error as e:
-        logger.error(f"Error checking existing cluster value: {e}")
-        return None
-    finally:
-        if connection.is_connected():
-            connection.close()
 
 # Get the maximum existing cluster value
 def get_max_cluster_value():
@@ -219,7 +198,7 @@ def get_max_cluster_value():
         if connection.is_connected():
             connection.close()
 
-# Insert data into the SQL database (sigma_alerts or dbscan_outlier)
+# Batch insert data into the SQL database (sigma_alerts or dbscan_outlier)
 def insert_data_to_sql(data, table, cluster_value):
     """Insert processed data into the specified table ('sigma_alerts' or 'dbscan_outlier')."""
     if data:
@@ -230,10 +209,12 @@ def insert_data_to_sql(data, table, cluster_value):
                 INSERT INTO {table} (title, tags, description, system_time, computer_name, user_id, event_id, provider_name, dbscan_cluster, raw)
                 VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s);
                 """
-                # Assign the same cluster value to all records
-                data_with_cluster = [(row[0], row[1], row[2], row[3], row[4], row[5], row[6], row[7], cluster_value, row[8]) for row in data]
-                cursor.executemany(insert_query, data_with_cluster)
-                connection.commit()
+                # Batch insert in chunks
+                for i in range(0, len(data), BATCH_SIZE):
+                    batch = data[i:i + BATCH_SIZE]
+                    data_with_cluster = [(row[0], row[1], row[2], row[3], row[4], row[5], row[6], row[7], cluster_value, row[8]) for row in batch]
+                    cursor.executemany(insert_query, data_with_cluster)
+                    connection.commit()
                 logger.info(f"Inserted {len(data)} rows into '{table}' with cluster value {cluster_value}.")
         except Error as e:
             logger.error(f"Error inserting data into {table}: {e}")
@@ -266,6 +247,16 @@ def schedule_truncation():
         schedule.run_pending()
         time.sleep(1)
 
+# Process a single log file and insert data into the database
+def process_and_insert_log(file_name, last_processed_time):
+    full_path = os.path.join(log_folder, file_name)
+    logger.info(f"Processing file: {full_path}")
+    data, latest_time = process_log_file(full_path, last_processed_time)
+    if data:
+        cluster_value = get_max_cluster_value() + 1
+        insert_data_to_sql(data, 'sigma_alerts', cluster_value)
+    return latest_time
+
 # Monitor and process new log files
 def monitor_folder(log_folder):
     """Monitor the folder and process new log files as they arrive."""
@@ -276,21 +267,16 @@ def monitor_folder(log_folder):
         # Process all files if no bookmark exists or is empty
         logger.info("Processing all files as no bookmark exists.")
         all_files = sorted(os.listdir(log_folder))
-        for file_name in all_files:
-            full_path = os.path.join(log_folder, file_name)
-            if os.path.isfile(full_path):
-                logger.info(f"Processing file: {full_path}")
-                data, latest_time = process_log_file(full_path, last_processed_time)
-                if data:
-                    for record in data:
-                        existing_cluster_value = get_existing_cluster_value(record)
-                        if existing_cluster_value is not None:
-                            cluster_value = existing_cluster_value
-                        else:
-                            max_cluster_value = get_max_cluster_value()
-                            cluster_value = max_cluster_value + 1
-                        insert_data_to_sql([record], 'sigma_alerts', cluster_value)
-                    last_processed_time = latest_time
+        with ThreadPoolExecutor(max_workers=os.cpu_count()) as executor:
+            futures = {executor.submit(process_and_insert_log, file_name, last_processed_time): file_name for file_name in all_files}
+            for future in as_completed(futures):
+                file_name = futures[future]
+                try:
+                    result = future.result()
+                    if result and (last_processed_time is None or result > last_processed_time):
+                        last_processed_time = result
+                except Exception as e:
+                    logger.error(f"Error processing file {file_name}: {e}")
 
         if last_processed_time:
             update_last_processed_time(last_processed_time)
@@ -303,25 +289,20 @@ def monitor_folder(log_folder):
             current_files = set(os.listdir(log_folder))
             new_files = current_files - processed_files
 
-            for new_file in new_files:
-                full_path = os.path.join(log_folder, new_file)
-                if os.path.isfile(full_path):
-                    logger.info(f"Processing new file: {full_path}")
-                    data, latest_time = process_log_file(full_path, last_processed_time)
-                    if data:
-                        for record in data:
-                            existing_cluster_value = get_existing_cluster_value(record)
-                            if existing_cluster_value is not None:
-                                cluster_value = existing_cluster_value
-                            else:
-                                max_cluster_value = get_max_cluster_value()
-                                cluster_value = max_cluster_value + 1
-                            insert_data_to_sql([record], 'sigma_alerts', cluster_value)
+            with ThreadPoolExecutor(max_workers=os.cpu_count()) as executor:
+                futures = {executor.submit(process_and_insert_log, new_file, last_processed_time): new_file for new_file in new_files}
+                for future in as_completed(futures):
+                    file_name = futures[future]
+                    try:
+                        result = future.result()
+                        if result and (last_processed_time is None or result > last_processed_time):
+                            last_processed_time = result
+                        processed_files.add(file_name)
+                    except Exception as e:
+                        logger.error(f"Error processing file {file_name}: {e}")
 
-                    if isinstance(latest_time, datetime):
-                        update_last_processed_time(latest_time)
-
-                    processed_files.add(new_file)
+            if last_processed_time:
+                update_last_processed_time(last_processed_time)
 
             time.sleep(5)  # Check for new files every 5 seconds
 
@@ -340,7 +321,6 @@ if __name__ == "__main__":
     ensure_column_exists("dbscan_outlier", "raw", "TEXT")
 
     # Start the truncation scheduling in a separate thread
-    import threading
     truncation_thread = threading.Thread(target=schedule_truncation)
     truncation_thread.daemon = True
     truncation_thread.start()
