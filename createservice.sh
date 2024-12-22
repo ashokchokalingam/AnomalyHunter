@@ -1,5 +1,8 @@
 #!/bin/bash
 
+# Get the current directory
+SCRIPT_DIR=$(dirname "$(readlink -f "$0")")
+
 # Create the sql.service file
 cat <<EOL | sudo tee /etc/systemd/system/sql.service
 [Unit]
@@ -7,9 +10,9 @@ Description=SQL Service
 After=network.target
 
 [Service]
-User=$(whoami)
-WorkingDirectory=/home/ashokchokalingam/RhythmUEBA
-ExecStart=/usr/bin/python3 /home/ashokchokalingam/RhythmUEBA/SQL.py
+User=root
+WorkingDirectory=$SCRIPT_DIR
+ExecStart=/usr/bin/python3 $SCRIPT_DIR/SQL.py
 Restart=always
 
 [Install]
@@ -24,9 +27,9 @@ After=sql.service
 Requires=sql.service
 
 [Service]
-User=$(whoami)
-WorkingDirectory=/home/ashokchokalingam/RhythmUEBA
-ExecStart=/usr/bin/python3 /home/ashokchokalingam/RhythmUEBA/dbscan.py
+User=root
+WorkingDirectory=$SCRIPT_DIR
+ExecStart=/usr/bin/python3 $SCRIPT_DIR/dbscan.py
 Restart=always
 
 [Install]
