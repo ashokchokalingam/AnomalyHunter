@@ -161,6 +161,45 @@ Script to truncate log files older than 24 hours.
 
 A cron job is set up to run `truncatesyslog.py` every hour to maintain the log files by truncating entries older than 24 hours.
 
+## Testing SQL Commands
+
+Here are some SQL commands you can use to test and inspect the contents of the `sigma_alerts` table:
+
+1. **View All Rows in the `sigma_alerts` Table**:
+    ```sql
+    SELECT * FROM sigma_alerts;
+    ```
+
+2. **Display the Top 10 Rows in the `sigma_alerts` Table**:
+    ```sql
+    SELECT * FROM sigma_alerts LIMIT 10;
+    ```
+
+3. **Display the Last 10 Rows in the `sigma_alerts` Table**:
+    ```sql
+    SELECT * FROM sigma_alerts ORDER BY id DESC LIMIT 10;
+    ```
+
+4. **Display Rows Where `dbscan_cluster` is -1**:
+    ```sql
+    SELECT * FROM sigma_alerts WHERE dbscan_cluster = -1;
+    ```
+
+5. **Count the Number of Rows in the `sigma_alerts` Table**:
+    ```sql
+    SELECT COUNT(*) FROM sigma_alerts;
+    ```
+
+6. **View All Titles with Their Counts**:
+    ```sql
+    SELECT title, COUNT(*) as count FROM sigma_alerts GROUP BY title;
+    ```
+
+7. **View Titles with Their Counts Where `dbscan_cluster` is -1**:
+    ```sql
+    SELECT title, COUNT(*) as count FROM sigma_alerts WHERE dbscan_cluster = -1 GROUP BY title;
+    ```
+
 ## Contributing
 
 Contributions are welcome! Please fork the repository and create a pull request with your changes. Ensure your code follows the existing style and passes all tests.
