@@ -405,19 +405,13 @@ Here are some SQL commands you can use to test and inspect the contents of the `
     ```
     This command retrieves all rows where `tags` is not `NULL`.
 
-13. **Filter by Date Range (system_time)**:
-    ```sql
-    SELECT * FROM sigma_alerts WHERE system_time BETWEEN '2024-01-01 00:00:00' AND '2024-12-31 23:59:59';
-    ```
-    This command retrieves all rows where `system_time` falls within the specified date range.
-
-14. **Count Rows Grouped by provider_name**:
+13. **Count Rows Grouped by provider_name**:
     ```sql
     SELECT provider_name, COUNT(*) AS count FROM sigma_alerts GROUP BY provider_name;
     ```
     This command groups the rows by `provider_name` and counts the occurrences of each provider.
 
-15. **Filter by Specific user_id**:
+14. **Filter by Specific user_id**:
     ```sql
     SELECT * FROM sigma_alerts WHERE user_id = 'domain\\username';
     ```
