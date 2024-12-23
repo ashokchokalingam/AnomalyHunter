@@ -12,7 +12,7 @@ template(name="SingleLineJSONFormat" type="string" string="%msg%\n")
 ###########################
 
 input(type="imfile"
-      File="/var/log/logstash/anomalyhunter/*.json"
+      File="/var/log/logstash/anomalyhunter/*.syslog"
       Tag="anomalyhunter"
       Severity="info"
       Facility="local6"
