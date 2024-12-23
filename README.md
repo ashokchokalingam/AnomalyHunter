@@ -421,15 +421,6 @@ Here are some SQL commands you can use to test and inspect the contents of the `
     ```sql
     SELECT * FROM sigma_alerts WHERE user_id = 'domain\\username';
     ```
-    This command retrieves all rows where `user_id` is 'domain\\username'.
-
-### Combined One-Line Commands
-
-For easy execution, here are all the commands combined into one line, separated by semicolons:
-
-```sql
-SELECT COUNT(*) FROM sigma_alerts; SELECT title, COUNT(*) as count FROM sigma_alerts GROUP BY title; SELECT title, dbscan_cluster, COUNT(*) AS count FROM sigma_alerts WHERE dbscan_cluster != -1 GROUP BY title, dbscan_cluster; SELECT title, COUNT(*) as count FROM sigma_alerts WHERE dbscan_cluster = -1 GROUP BY title; SELECT title, tags, COUNT(*) AS count FROM sigma_alerts GROUP BY title, tags; SELECT title, dbscan_cluster, COUNT(*) AS count FROM sigma_alerts GROUP BY title, dbscan_cluster; SELECT title, dbscan_cluster, computer_name, user_id, COUNT(*) AS count FROM sigma_alerts WHERE dbscan_cluster != -1 GROUP BY title, dbscan_cluster, computer_name, user_id; SELECT * FROM sigma_alerts WHERE title = 'Alternate PowerShell Hosts - PowerShell Module' AND dbscan_cluster = 0; SELECT DISTINCT user_id FROM sigma_alerts; SELECT dbscan_cluster, COUNT(*) AS count FROM sigma_alerts GROUP BY dbscan_cluster; SELECT * FROM sigma_alerts WHERE computer_name IS NULL; SELECT * FROM sigma_alerts WHERE tags IS NOT NULL; SELECT * FROM sigma_alerts WHERE system_time BETWEEN '2024-01-01 00:00:00' AND '2024-12-31 23:59:59'; SELECT provider_name, COUNT(*) AS count FROM sigma_alerts GROUP BY provider_name; SELECT * FROM sigma_alerts WHERE user_id = 'domain\\username';
-
 ## Contributing
 
 Contributions are welcome! Please fork the repository and create a pull request with your changes. Ensure your code follows the existing style and passes all tests.
