@@ -356,64 +356,10 @@ Here are some SQL commands you can use to test and inspect the contents of the `
     SELECT title, COUNT(*) as count FROM sigma_alerts WHERE dbscan_cluster = -1 GROUP BY title;
     ```
     This command groups the rows by `title` for rows where `dbscan_cluster` is `-1` and counts the occurrences.
-
-5. **Group by Title and Tags and Count Occurrences**:
+   
+5. **Group by Rand
     ```sql
-    SELECT title, tags, COUNT(*) AS count FROM sigma_alerts GROUP BY title, tags;
-    ```
-    This command groups the rows by `title` and `tags`, and counts the occurrences.
-
-6. **Group by Title and dbscan_cluster and Count Occurrences**:
-    ```sql
-    SELECT title, dbscan_cluster, COUNT(*) AS count FROM sigma_alerts GROUP BY title, dbscan_cluster;
-    ```
-    This command groups the rows by `title` and `dbscan_cluster`, and counts the occurrences.
-
-7. **Group by Title, dbscan_cluster, computer_name, and user_id Excluding `-1` and Count Occurrences**:
-    ```sql
-    SELECT title, dbscan_cluster, computer_name, user_id, COUNT(*) AS count FROM sigma_alerts WHERE dbscan_cluster != -1 GROUP BY title, dbscan_cluster, computer_name, user_id;
-    ```
-    This command groups the rows by `title`, `dbscan_cluster`, `computer_name`, and `user_id`, excluding rows where `dbscan_cluster` is `-1`, and counts the occurrences.
-
-8. **Filter by Specific Title and dbscan_cluster**:
-    ```sql
-    SELECT * FROM sigma_alerts WHERE title = 'Alternate PowerShell Hosts - PowerShell Module' AND dbscan_cluster = 0;
-    ```
-    This command retrieves all rows where `title` is 'Alternate PowerShell Hosts - PowerShell Module' and `dbscan_cluster` is `0`.
-
-9. **Retrieve Unique user_id Values**:
-    ```sql
-    SELECT DISTINCT user_id FROM sigma_alerts;
-    ```
-    This command retrieves all unique `user_id` values from the `sigma_alerts` table.
-
-10. **Summarize dbscan_cluster Distribution**:
-    ```sql
-    SELECT dbscan_cluster, COUNT(*) AS count FROM sigma_alerts GROUP BY dbscan_cluster;
-    ```
-    This command groups the rows by `dbscan_cluster` and counts the occurrences of each cluster.
-
-11. **Retrieve Logs with Missing computer_name**:
-    ```sql
-    SELECT * FROM sigma_alerts WHERE computer_name IS NULL;
-    ```
-    This command retrieves all rows where `computer_name` is `NULL`.
-
-12. **Retrieve Logs with Non-Default tags**:
-    ```sql
-    SELECT * FROM sigma_alerts WHERE tags IS NOT NULL;
-    ```
-    This command retrieves all rows where `tags` is not `NULL`.
-
-13. **Count Rows Grouped by provider_name**:
-    ```sql
-    SELECT provider_name, COUNT(*) AS count FROM sigma_alerts GROUP BY provider_name;
-    ```
-    This command groups the rows by `provider_name` and counts the occurrences of each provider.
-
-14. **Filter by Specific user_id**:
-    ```sql
-    SELECT * FROM sigma_alerts WHERE user_id = 'domain\\username';
+    SELECT id, title, tags, computer_name, user_id, provider_name, dbscan_cluster FROM sigma_alerts ORDER BY RAND() LIMIT 100;
     ```
 ## Contributing
 
