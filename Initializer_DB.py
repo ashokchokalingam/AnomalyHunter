@@ -9,7 +9,7 @@ logger = logging.getLogger()
 # Database configuration
 db_config = {
     "host": "localhost",
-    "user": "sigma",
+    "user": "root",
     "password": "sigma",
     "database": "sigma_db",
 }
@@ -35,7 +35,8 @@ def initialize_sql_tables():
                     event_id VARCHAR(50),
                     provider_name VARCHAR(100),
                     dbscan_cluster INT,
-                    raw TEXT
+                    raw TEXT,
+                    ip_address VARCHAR(50) -- New field for IP Address
                 );
                 """
                 cursor.execute(create_sigma_alerts_query)
@@ -53,7 +54,8 @@ def initialize_sql_tables():
                     event_id VARCHAR(50),
                     provider_name VARCHAR(100),
                     dbscan_cluster INT,
-                    raw TEXT
+                    raw TEXT,
+                    ip_address VARCHAR(50) -- New field for IP Address
                 );
                 """
                 cursor.execute(create_dbscan_outlier_query)
@@ -63,7 +65,7 @@ def initialize_sql_tables():
     except Error as e:
         logger.error(f"Error initializing SQL tables: {e}")
     finally:
-        if connection and connection.is_connected():
+        if connection.is_connected():
             connection.close()
 
 if __name__ == "__main__":
