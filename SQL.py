@@ -50,7 +50,7 @@ def initialize_sql_tables():
                 provider_name VARCHAR(100),
                 dbscan_cluster INT,
                 raw TEXT,
-                rule_id VARCHAR(50),
+                ruleid VARCHAR(50),
                 rule_level VARCHAR(50),
                 task VARCHAR(255)
             );
@@ -71,7 +71,7 @@ def initialize_sql_tables():
                 provider_name VARCHAR(100),
                 dbscan_cluster INT,
                 raw TEXT,
-                rule_id VARCHAR(50),
+                ruleid VARCHAR(50),
                 rule_level VARCHAR(50),
                 task VARCHAR(255)
             );
@@ -156,7 +156,7 @@ def process_log_file(file_path, last_processed_time):
                 user_id = re.search(r'"UserID":"(.*?)"', line)
                 event_id = re.search(r'"EventID":(\d+)', line)
                 provider_name = re.search(r'"Provider_Name":"(.*?)"', line)
-                rule_id = re.search(r'"id":"(.*?)"', line)
+                ruleid = re.search(r'"id":"(.*?)"', line)
                 rule_level = re.search(r'"rule_level":"(.*?)"', line)
                 task = re.search(r'"Task":"(.*?)"', line)
 
@@ -168,7 +168,7 @@ def process_log_file(file_path, last_processed_time):
                 user_id = user_id.group(1).strip() if user_id else None
                 event_id = event_id.group(1).strip() if event_id else None
                 provider_name = provider_name.group(1).strip() if provider_name else None
-                rule_id = rule_id.group(1).strip() if rule_id else None
+                ruleid = ruleid.group(1).strip() if ruleid else None
                 rule_level = rule_level.group(1).strip() if rule_level else None
                 task = task.group(1).strip() if task else None
 
@@ -185,7 +185,7 @@ def process_log_file(file_path, last_processed_time):
                         logger.error(f"Failed to process time: {system_time} | Error: {e}")
                         system_time = None
 
-                processed_data.append((title, tags, description, system_time.strftime("%Y-%m-%d %H:%M:%S"), computer_name, user_id, event_id, provider_name, rule_id, rule_level, task, line.strip()))
+                processed_data.append((title, tags, description, system_time.strftime("%Y-%m-%d %H:%M:%S"), computer_name, user_id, event_id, provider_name, ruleid, rule_level, task, line.strip()))
 
             except Exception as e:
                 logger.error(f"Failed to process line: {line.strip()} | Error: {e}")
@@ -218,7 +218,7 @@ def insert_data_to_sql(data, table, cluster_value):
             connection = mysql.connector.connect(**db_config)
             with connection.cursor() as cursor:
                 insert_query = f"""
-                INSERT INTO {table} (title, tags, description, system_time, computer_name, user_id, event_id, provider_name, dbscan_cluster, raw, rule_id, rule_level, task)
+                INSERT INTO {table} (title, tags, description, system_time, computer_name, user_id, event_id, provider_name, dbscan_cluster, raw, ruleid, rule_level, task)
                 VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s);
                 """
                 # Batch insert in chunks
@@ -331,8 +331,8 @@ if __name__ == "__main__":
     ensure_column_exists("dbscan_outlier", "dbscan_cluster", "INT")
     ensure_column_exists("sigma_alerts", "raw", "TEXT")
     ensure_column_exists("dbscan_outlier", "raw", "TEXT")
-    ensure_column_exists("sigma_alerts", "rule_id", "VARCHAR(50)")
-    ensure_column_exists("dbscan_outlier", "rule_id", "VARCHAR(50)")
+    ensure_column_exists("sigma_alerts", "ruleid", "VARCHAR(50)")
+    ensure_column_exists("dbscan_outlier", "ruleid", "VARCHAR(50)")
     ensure_column_exists("sigma_alerts", "rule_level", "VARCHAR(50)")
     ensure_column_exists("dbscan_outlier", "rule_level", "VARCHAR(50)")
     ensure_column_exists("sigma_alerts", "task", "VARCHAR(255)")
