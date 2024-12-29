@@ -37,7 +37,7 @@ def initialize_sql_tables():
                     provider_name VARCHAR(100),
                     dbscan_cluster INT,
                     raw TEXT,
-                    rule_id VARCHAR(50),
+                    ruleid VARCHAR(50),
                     rule_level VARCHAR(50),
                     task VARCHAR(255)
                 );
@@ -58,7 +58,7 @@ def initialize_sql_tables():
                     provider_name VARCHAR(100),
                     dbscan_cluster INT,
                     raw TEXT,
-                    rule_id VARCHAR(50),
+                    ruleid VARCHAR(50),
                     rule_level VARCHAR(50),
                     task VARCHAR(255)
                 );
@@ -73,6 +73,26 @@ def initialize_sql_tables():
         if connection and connection.is_connected():
             connection.close()
 
+# Ensure columns exist
+def ensure_column_exists(table_name, column_name, column_definition):
+    """Ensure the specified column exists in the given table."""
+    try:
+        connection = mysql.connector.connect(**db_config)
+        if connection.is_connected():
+            with connection.cursor() as cursor:
+                cursor.execute(f"SHOW COLUMNS FROM {table_name} LIKE '{column_name}'")
+                result = cursor.fetchone()
+                if not result:
+                    cursor.execute(f"ALTER TABLE {table_name} ADD COLUMN {column_name} {column_definition}")
+                    connection.commit()
+                    logger.info(f"Added '{column_name}' column to '{table_name}' table.")
+    except Error as e:
+        logger.error(f"Error ensuring '{column_name}' column exists in '{table_name}': {e}")
+    finally:
+        if connection.is_connected():
+            connection.close()
+
+# Insert alert data into the sigma_alerts table
 def insert_alert(alert_data):
     """Insert alert data into the sigma_alerts table."""
     connection = None
@@ -82,31 +102,37 @@ def insert_alert(alert_data):
             with connection.cursor() as cursor:
                 insert_query = """
                 INSERT INTO sigma_alerts (
-                    title, tags, description, system_time, computer_name, user_id, event_id, provider_name, dbscan_cluster, raw, rule_id, rule_level, task
+                    title, tags, description, system_time, computer_name, user_id, event_id, provider_name, dbscan_cluster, raw, ruleid, rule_level, task
                 ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s);
                 """
                 cursor.execute(insert_query, (
-                    alert_data['title'],
-                    ','.join(alert_data['tags']),
-                    alert_data['description'],
-                    alert_data['SystemTime'],
-                    alert_data['Computer'],
-                    alert_data['TargetUserName'],
-                    alert_data['EventID'],
-                    alert_data['Provider_Name'],
+                    alert_data.get('title'),
+                    ','.join(alert_data.get('tags', [])),
+                    alert_data.get('description'),
+                    alert_data.get('SystemTime'),
+                    alert_data.get('Computer'),
+                    alert_data.get('TargetUserName'),
+                    alert_data.get('EventID'),
+                    alert_data.get('Provider_Name'),
                     None,  # Assuming dbscan_cluster is not available at this point
                     json.dumps(alert_data),
-                    alert_data['id'],
-                    alert_data['rule_level'],
-                    alert_data['Task']
+                    alert_data.get('id'),
+                    alert_data.get('rule_level'),
+                    alert_data.get('Task')
                 ))
                 connection.commit()
                 logger.info("Inserted alert data into 'sigma_alerts'.")
     except Error as e:
         logger.error(f"Error inserting alert data: {e}")
     finally:
-        if connection and connection.is_connected():
+        if connection.is_connected():
             connection.close()
 
 if __name__ == "__main__":
     initialize_sql_tables()
+    ensure_column_exists("sigma_alerts", "ruleid", "VARCHAR(50)")
+    ensure_column_exists("dbscan_outlier", "ruleid", "VARCHAR(50)")
+    ensure_column_exists("sigma_alerts", "rule_level", "VARCHAR(50)")
+    ensure_column_exists("dbscan_outlier", "rule_level", "VARCHAR(50)")
+    ensure_column_exists("sigma_alerts", "task", "VARCHAR(255)")
+    ensure_column_exists("dbscan_outlier", "task", "VARCHAR(255)")
