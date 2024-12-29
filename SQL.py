@@ -49,7 +49,10 @@ def initialize_sql_tables():
                 event_id VARCHAR(50),
                 provider_name VARCHAR(100),
                 dbscan_cluster INT,
-                raw TEXT
+                raw TEXT,
+                rule_id VARCHAR(50),
+                rule_level VARCHAR(50),
+                task VARCHAR(255)
             );
             """
             cursor.execute(create_sigma_alerts_query)
@@ -67,7 +70,10 @@ def initialize_sql_tables():
                 event_id VARCHAR(50),
                 provider_name VARCHAR(100),
                 dbscan_cluster INT,
-                raw TEXT
+                raw TEXT,
+                rule_id VARCHAR(50),
+                rule_level VARCHAR(50),
+                task VARCHAR(255)
             );
             """
             cursor.execute(create_dbscan_outlier_query)
@@ -150,6 +156,9 @@ def process_log_file(file_path, last_processed_time):
                 user_id = re.search(r'"UserID":"(.*?)"', line)
                 event_id = re.search(r'"EventID":(\d+)', line)
                 provider_name = re.search(r'"Provider_Name":"(.*?)"', line)
+                rule_id = re.search(r'"id":"(.*?)"', line)
+                rule_level = re.search(r'"rule_level":"(.*?)"', line)
+                task = re.search(r'"Task":"(.*?)"', line)
 
                 # Extract and clean data
                 title = title.group(1).strip() if title else None
@@ -159,6 +168,9 @@ def process_log_file(file_path, last_processed_time):
                 user_id = user_id.group(1).strip() if user_id else None
                 event_id = event_id.group(1).strip() if event_id else None
                 provider_name = provider_name.group(1).strip() if provider_name else None
+                rule_id = rule_id.group(1).strip() if rule_id else None
+                rule_level = rule_level.group(1).strip() if rule_level else None
+                task = task.group(1).strip() if task else None
 
                 # Convert SystemTime to MySQL-compatible format
                 if system_time:
@@ -173,7 +185,7 @@ def process_log_file(file_path, last_processed_time):
                         logger.error(f"Failed to process time: {system_time} | Error: {e}")
                         system_time = None
 
-                processed_data.append((title, tags, description, system_time.strftime("%Y-%m-%d %H:%M:%S"), computer_name, user_id, event_id, provider_name, line.strip()))
+                processed_data.append((title, tags, description, system_time.strftime("%Y-%m-%d %H:%M:%S"), computer_name, user_id, event_id, provider_name, rule_id, rule_level, task, line.strip()))
 
             except Exception as e:
                 logger.error(f"Failed to process line: {line.strip()} | Error: {e}")
@@ -206,13 +218,13 @@ def insert_data_to_sql(data, table, cluster_value):
             connection = mysql.connector.connect(**db_config)
             with connection.cursor() as cursor:
                 insert_query = f"""
-                INSERT INTO {table} (title, tags, description, system_time, computer_name, user_id, event_id, provider_name, dbscan_cluster, raw)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s);
+                INSERT INTO {table} (title, tags, description, system_time, computer_name, user_id, event_id, provider_name, dbscan_cluster, raw, rule_id, rule_level, task)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s);
                 """
                 # Batch insert in chunks
                 for i in range(0, len(data), BATCH_SIZE):
                     batch = data[i:i + BATCH_SIZE]
-                    data_with_cluster = [(row[0], row[1], row[2], row[3], row[4], row[5], row[6], row[7], cluster_value, row[8]) for row in batch]
+                    data_with_cluster = [(row[0], row[1], row[2], row[3], row[4], row[5], row[6], row[7], cluster_value, row[11], row[8], row[9], row[10]) for row in batch]
                     cursor.executemany(insert_query, data_with_cluster)
                     connection.commit()
                 logger.info(f"Inserted {len(data)} rows into '{table}' with cluster value {cluster_value}.")
@@ -319,6 +331,12 @@ if __name__ == "__main__":
     ensure_column_exists("dbscan_outlier", "dbscan_cluster", "INT")
     ensure_column_exists("sigma_alerts", "raw", "TEXT")
     ensure_column_exists("dbscan_outlier", "raw", "TEXT")
+    ensure_column_exists("sigma_alerts", "rule_id", "VARCHAR(50)")
+    ensure_column_exists("dbscan_outlier", "rule_id", "VARCHAR(50)")
+    ensure_column_exists("sigma_alerts", "rule_level", "VARCHAR(50)")
+    ensure_column_exists("dbscan_outlier", "rule_level", "VARCHAR(50)")
+    ensure_column_exists("sigma_alerts", "task", "VARCHAR(255)")
+    ensure_column_exists("dbscan_outlier", "task", "VARCHAR(255)")
 
     # Start the truncation scheduling in a separate thread
     truncation_thread = threading.Thread(target=schedule_truncation)
