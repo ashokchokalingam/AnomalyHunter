@@ -19,7 +19,7 @@ log_folder = os.getenv("LOG_FOLDER_PATH", "/var/log/logstash/detected_zircolite/
 # Database configuration (Using environment variables for security)
 db_config = {
     "host": os.getenv("DB_HOST", "localhost"),
-    "user": os.getenv("DB_USER", "sigma"),
+    "user": os.getenv("DB_USER", "root"),
     "password": os.getenv("DB_PASSWORD", "sigma"),
     "database": os.getenv("DB_NAME", "sigma_db"),
 }
