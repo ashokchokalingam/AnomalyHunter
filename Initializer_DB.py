@@ -10,7 +10,7 @@ logger = logging.getLogger()
 # Database configuration
 db_config = {
     "host": "localhost",
-    "user": "sigma",
+    "user": "root",
     "password": "sigma",
     "database": "sigma_db",
 }
